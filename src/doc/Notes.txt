@@ -1,0 +1,77 @@
+Meta service can run with sun or openjdk versions of java
+
+Client needs openjdk, otherwise it requires signed bcprov and even with that it still complains that it can't find private key.
+
+To start the server, simply run 
+
+java -jar meta.jar meta.conf
+
+to add the trusted client, run the client with openjdk:
+export JAVA_HOME=/usr/lib/jvm/java-1.6.0-openjdk-1.6.0.0.x86_64
+$JAVA_HOME/jre/bin/java -cp meta.jar org.joni.test.meta.client.MetaClient -c meta-client-trusted.conf addUser --name "CN=trusted client,OU=Relaxation,O=Utopia,L=Tropic,C=UG" --root trustedRoot
+
+You need files and dirs:
+drwxrwxr-x  2 hahkala hahkala    4096 2012-03-21 22:09 certificates
+-rw-------  1 hahkala hahkala    2968 2012-02-09 21:20 hostcert.pem
+-rw-------  1 hahkala hahkala     887 2012-02-09 21:20 hostkey.pem
+-rw-rw-r--  1 hahkala hahkala     156 2012-03-23 17:14 meta-client-trusted.conf
+-rw-rw-r--  1 hahkala hahkala     194 2012-03-21 19:56 meta.conf
+-rw-rw-r--  1 hahkala hahkala 9497061 2012-03-23 16:49 meta.jar
+drwxrwxr-x  3 hahkala hahkala       8 2012-03-22 16:40 meta-storage.dat
+-rw-rw-r--  1 hahkala hahkala     964 2012-03-09 15:13 meta-storage.xml
+-rw-------  1 hahkala hahkala    2971 2012-02-09 20:14 trusted_client.cert
+-rw-------  1 hahkala hahkala    1041 2012-02-09 20:14 trusted_client.priv
+drwxrwxr-x  3 hahkala hahkala       8 2012-03-22 16:40 users-storage.dat
+
+
+server config meta.conf:
+port=40669
+cacheConfigFile=meta-storage.xml
+host=localhost
+sslCertFile=hostcert.pem
+sslKey=hostkey.pem
+trustStoreDir=certificates
+superuser=CN=trusted client,OU=Relaxation,O=Utopia,L=Tropic,C=UG
+
+cache config meta-storage.xml:
+<?xml version="1.0" encoding="UTF-8"?>
+<infinispan xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns="urn:infinispan:config:5.0">
+  <global />
+  <default />
+  <namedCache name="meta">
+    <loaders shared="false">
+      <loader
+          class="org.infinispan.loaders.file.FileCacheStore"
+          fetchPersistentState="true" ignoreModifications="false"
+          purgeOnStartup="false">
+        <properties>
+          <property name="location" value="meta-storage.dat" />
+        </properties>
+      </loader>
+    </loaders>
+  </namedCache>
+  <namedCache name="users">
+    <loaders shared="false">
+      <loader
+          class="org.infinispan.loaders.file.FileCacheStore"
+          fetchPersistentState="true" ignoreModifications="false"
+          purgeOnStartup="false">
+        <properties>
+          <property name="location" value="users-storage.dat" />
+        </properties>
+      </loader>
+    </loaders>
+  </namedCache>
+
+
+client config meta-clietn-trusted.conf:
+sslCertFile=trusted_client.cert
+sslKey=trusted_client.priv
+sslKeyPasswd=changeit
+trustStoreDir=certificates
+metaService=https://localhost:40669/MetaService
+
+Adding a user:
+$JAVA_HOME/jre/bin/java -cp meta.jar org.joni.test.meta.client.MetaClient -c meta-client-trusted.conf \
+addUser --name "CN=Seppo Heikkila,OU=Tech,O=HIP,DC=slcs,C=FI" --root SecureRoot --sla Premium
