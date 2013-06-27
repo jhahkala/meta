@@ -2,7 +2,6 @@ package com.caucho.hessian.client;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
-import java.net.MalformedURLException;
 import java.net.URL;
 
 import com.caucho.hessian.io.HessianRemoteObject;

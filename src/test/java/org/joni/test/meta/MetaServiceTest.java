@@ -443,6 +443,7 @@ public class MetaServiceTest extends TestCase {
     }
 
     //@SuppressWarnings("null")
+    @SuppressWarnings("null")
     @Test
     public void testGetByPath() throws Exception {
         try {
@@ -511,7 +512,7 @@ public class MetaServiceTest extends TestCase {
             }
             assertTrue(exception);
             String idOrig = dsubdir;
-            MetaFile id = service.getFileByPath(idOrig);
+            service.getFileByPath(idOrig);
 
             System.out.println(service.getFileByPath(idOrig).getId().getClass());
             System.out.println(subdir.getId().getClass());
