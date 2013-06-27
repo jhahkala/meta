@@ -6,6 +6,8 @@ import org.eclipse.jetty.http.HttpHeaders;
 
 public class HessianCookieProxy extends HessianProxy {
 
+    /** */
+    private static final long serialVersionUID = 3744566286788170542L;
     private String _cookie;
 
     protected HessianCookieProxy(URL url, HessianProxyFactory factory, Class<?> type) {
