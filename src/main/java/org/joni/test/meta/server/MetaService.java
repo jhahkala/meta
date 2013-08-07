@@ -312,8 +312,18 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
                 throw new FileNotFoundException("Parent file not found");
             }
             // TODO: requesting random files, you gain knowledge of the parent dir, should prevent...
-            if (!ACLHandler.hasReadAccess(getUser(), parent.getACL())) {
-                throw new IOException("Access denied to directory: " + parent.getName());
+            try {
+                if (!ACLHandler.hasReadAccess(getUser(), parent.getACL())) {
+                    throw new IOException("Access denied to directory: " + parent.getName());
+                }
+            } catch (IllegalArgumentException e){
+                if (getUser() == null){
+                    throw new IllegalArgumentException("When accessing: " + parent.getName() + " user was null, which should not happen.");
+                }
+                if (parent.getACL() == null){
+                    throw new IllegalArgumentException("When accessing: " + parent.getName() + " the ACL was null, which should not happen.");
+                }
+                throw e;
             }
         } else {
             // root directory, return only if has rights
