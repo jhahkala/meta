@@ -8,32 +8,26 @@ import com.caucho.hessian.io.HessianRemoteObject;
 
 public class HessianCookieProxyFactory extends HessianProxyFactory {
     /**
-     * Creates a new proxy with the specified URL.  The returned object
-     * is a proxy with the interface specified by api.
-     *
+     * Creates a new proxy with the specified URL. The returned object is a proxy with the interface specified by api.
+     * 
      * <pre>
      * String url = "http://localhost:8080/ejb/hello");
      * HelloHome hello = (HelloHome) factory.create(HelloHome.class, url);
      * </pre>
-     *
+     * 
      * @param api the interface the proxy class needs to implement
      * @param url the URL where the client object is located.
-     *
+     * 
      * @return a proxy to the object with the specified interface.
      */
-    public Object create(Class<?> api, URL url, ClassLoader loader)
-    {
-      if (api == null)
-        throw new NullPointerException("api must not be null for HessianProxyFactory.create()");
-      InvocationHandler handler = null;
+    public Object create(Class<?> api, URL url, ClassLoader loader) {
+        if (api == null)
+            throw new NullPointerException("api must not be null for HessianProxyFactory.create()");
+        InvocationHandler handler = null;
 
-      handler = new HessianCookieProxy(url, this, api);
+        handler = new HessianCookieProxy(url, this, api);
 
-      return Proxy.newProxyInstance(loader,
-                                    new Class[] { api,
-                                                  HessianRemoteObject.class },
-                                    handler);
+        return Proxy.newProxyInstance(loader, new Class[] { api, HessianRemoteObject.class }, handler);
     }
-
 
 }
