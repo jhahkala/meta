@@ -91,6 +91,12 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
         // Interpret the client's certificate.
         X509Certificate[] cert = (X509Certificate[]) request.getAttribute("javax.servlet.request.X509Certificate");
         certStore.set(cert);
+        System.out.println("PAramaters:");
+        Map map = request.getParameterMap();
+        Collection i = map.values();
+        for (Object attribute :i){
+            System.out.println("Object: " + attribute);
+        }
         super.service(request,response);
     }
 
