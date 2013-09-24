@@ -3,6 +3,7 @@ package org.joni.test.meta;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -20,6 +21,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.caucho.hessian.client.HessianProxyFactory;
+import com.caucho.hessian.client.HessianSRPProxy;
+import com.caucho.hessian.client.HessianSRPProxyFactory;
 import com.caucho.hessian.client.TMHessianURLConnectionFactory;
 import com.eaio.uuid.UUID;
 
@@ -89,13 +92,16 @@ public class MetaServiceTest extends TestCase {
             TMHostnameVerifier verifier = new TMHostnameVerifier();         
             
             String url = "https://localhost:40666/MetaService";
-            HessianProxyFactory factory = new HessianProxyFactory();
+            HessianSRPProxyFactory factory = new HessianSRPProxyFactory();
             TMHessianURLConnectionFactory connectionFactory = new TMHessianURLConnectionFactory();
             connectionFactory.setWrapper(wrapper);
             connectionFactory.setVerifier(verifier);
             connectionFactory.setHessianProxyFactory(factory);
             factory.setConnectionFactory(connectionFactory);
             MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
+            HessianSRPProxy proxy = (HessianSRPProxy) Proxy.getInvocationHandler(service);
+            proxy.setSession("srpTest");
+            
             UserInfo info = new UserInfo();
             info.setName(TEST_USER);
             service.addUser(info);

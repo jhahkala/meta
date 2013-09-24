@@ -14,6 +14,8 @@ import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.glite.security.trustmanager.ContextWrapper;
 
+import fi.hip.sicx.srp.SRPService;
+
 public class MetaServer {
 
     private Server _server = null;
@@ -50,8 +52,8 @@ public class MetaServer {
         
         SslContextFactory factory = new SslContextFactory();
         factory.setSslContext((new ContextWrapper(props, false)).getContext());
-        factory.setWantClientAuth(true);
-        factory.setNeedClientAuth(true);
+        factory.setWantClientAuth(false);
+        factory.setNeedClientAuth(false);
         SslSelectChannelConnector connector = new SslSelectChannelConnector(factory);
         
         int port = Integer.parseInt(props.getProperty(PORT_OPT));
@@ -68,7 +70,8 @@ public class MetaServer {
         context.setContextPath("/");
         _server.setHandler(context);
 
-        context.addServlet(new ServletHolder(new MetaService(filename)), "/*");
+        context.addServlet(new ServletHolder(new MetaService(filename)), "/MetaService");
+        context.addServlet(new ServletHolder(new SRPService(filename)), "/SRPService");
 
     }
 

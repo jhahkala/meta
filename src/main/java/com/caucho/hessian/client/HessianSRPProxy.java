@@ -2,8 +2,6 @@ package com.caucho.hessian.client;
 
 import java.net.URL;
 
-import org.eclipse.jetty.http.HttpHeaders;
-
 public class HessianSRPProxy extends HessianProxy {
 
     /** */
@@ -25,9 +23,8 @@ public class HessianSRPProxy extends HessianProxy {
     @Override
     protected void addRequestHeaders(HessianConnection conn) {
         conn.addHeader("Content-Type", "x-application/hessian");
-
         if (m_SRPSession != null) {
-            conn.addHeader(HttpHeaders.COOKIE, m_SRPSession + ";");
+            conn.addHeader("SRPSession", m_SRPSession);
         }
         String basicAuth = _factory.getBasicAuth();
 

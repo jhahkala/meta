@@ -76,8 +76,9 @@ public interface MetaDataAPI {
     /**
      * Get the given user's information. Superuser can use this method to access the information of the given user.
      * @return The information of the user.
+     * @throws SessionException 
      */
-    public UserInfo getOtherUserInfo(String name);
+    public UserInfo getOtherUserInfo(String name) throws SessionException;
     
     /**
      * Superuser can use this method to add an user to the system.

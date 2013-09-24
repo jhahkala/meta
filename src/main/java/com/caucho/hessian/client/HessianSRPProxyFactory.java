@@ -22,7 +22,7 @@ public class HessianSRPProxyFactory extends HessianProxyFactory {
      */
     public Object create(Class<?> api, URL url, ClassLoader loader) {
         if (api == null)
-            throw new NullPointerException("api must not be null for HessianProxyFactory.create()");
+            throw new NullPointerException("api must not be null for HessianSRPProxyFactory.create()");
         InvocationHandler handler = null;
 
         handler = new HessianSRPProxy(url, this, api);

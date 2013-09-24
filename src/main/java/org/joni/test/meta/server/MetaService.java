@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +18,8 @@ import java.util.StringTokenizer;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpSession;
 
 import org.glite.security.util.DNHandler;
 import org.infinispan.Cache;
@@ -24,6 +27,7 @@ import org.infinispan.manager.DefaultCacheManager;
 import org.joni.test.meta.ACLHandler;
 import org.joni.test.meta.MetaDataAPI;
 import org.joni.test.meta.MetaFile;
+import org.joni.test.meta.SessionException;
 import org.joni.test.meta.UserInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,28 +95,48 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
         // Interpret the client's certificate.
         X509Certificate[] cert = (X509Certificate[]) request.getAttribute("javax.servlet.request.X509Certificate");
         certStore.set(cert);
-        System.out.println("PAramaters:");
-        Map map = request.getParameterMap();
-        Collection i = map.values();
-        for (Object attribute :i){
-            System.out.println("Object: " + attribute);
+        Enumeration attrs = request.getAttributeNames();
+        System.out.println("Attributes:");
+        while (attrs.hasMoreElements()){
+            String attribute = (String)attrs.nextElement();
+            System.out.println("attribute: " + attribute + " value " + request.getAttribute(attribute));
+        }
+        System.out.println("Paramaters:");
+        Enumeration params = request.getParameterNames();
+        while (params.hasMoreElements()){
+            String attribute = (String)params.nextElement();
+            System.out.println("paramater: " + attribute );
+        }
+        if(request instanceof HttpServletRequest){
+            HttpSession session = ((HttpServletRequest)request).getSession();
+            HttpServletRequest sreg = (HttpServletRequest)request;
+            String SRPSession = sreg.getHeader("SRPSession");
+            System.out.println("Session: " + SRPSession);
+//            username = (String) session.getAttribute(SPConfiguration.userIdKey);
+//            System.out.println("User : " + username + " accessing... ");
+        }else{
+//            username = null;
         }
         super.service(request,response);
     }
 
-    private String getUser() {
+    private String getUser() throws SessionException {
         // Interpret the client's certificate.
         X509Certificate[] cert = certStore.get();
-        String user = DNHandler.getSubject(cert[0]).getRFCDNv2();
+        if(cert != null){
+            String user = DNHandler.getSubject(cert[0]).getRFCDNv2();
 
-        return user;
+            return user;
+        }
+        throw new SessionException("No session found. Login to start a session.");
+        
     }
 
-    @SuppressWarnings("unused")
-    private boolean checkPermissionForNewRoot() {
-        return _superUser.equals(getUser());
-    }
-
+//    @SuppressWarnings("unused")
+//    private boolean checkPermissionForNewRoot() {
+//        return _superUser.equals(getUser());
+//    }
+//
     public void putFile(MetaFile newFile) throws IOException {
 
         if (newFile == null) {
@@ -420,7 +444,8 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
 
     @Override
     public void addUser(UserInfo userInfo) throws IOException {
-        if (getUser().equals(_superUser) || userInfo.getName().equals(getUser())) {
+        String user = getUser();
+        if (user.equals(_superUser) || userInfo.getName().equals(user)) {
             if(users.get(userInfo.getName()) != null){
                 throw new IOException("User " + userInfo.getName() + " already exists!");
             }
@@ -457,7 +482,7 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
     }
 
     @Override
-    public UserInfo getOtherUserInfo(String name) {
+    public UserInfo getOtherUserInfo(String name) throws SessionException {
         if (getUser().equals(_superUser) || getUser().equals(name)) {
             UserInfo info = users.get(name);
             return info;

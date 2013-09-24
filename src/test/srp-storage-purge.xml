@@ -5,24 +5,12 @@
   	<globalJmxStatistics enabled="true" cacheManagerName="Hibernate2LC"/>
   </global>
   <default />
-  <namedCache name="meta">
+  <namedCache name="passwordsAndSessions">
     <loaders shared="false">
       <loader
           class="org.infinispan.loaders.file.FileCacheStore"
           fetchPersistentState="true" ignoreModifications="false"
-          purgeOnStartup="false">
-        <properties>
-          <property name="location" value="meta-storage.dat" />
-        </properties>
-      </loader>
-    </loaders>
-  </namedCache>
-  <namedCache name="users">
-    <loaders shared="false">
-      <loader
-          class="org.infinispan.loaders.file.FileCacheStore"
-          fetchPersistentState="true" ignoreModifications="false"
-          purgeOnStartup="false">
+          purgeOnStartup="true">
         <properties>
           <property name="location" value="users-storage.dat" />
         </properties>
