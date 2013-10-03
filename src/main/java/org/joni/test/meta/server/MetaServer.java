@@ -70,8 +70,10 @@ public class MetaServer {
         context.setContextPath("/");
         _server.setHandler(context);
 
-        context.addServlet(new ServletHolder(new MetaService(filename)), "/MetaService");
-        context.addServlet(new ServletHolder(new SRPService(filename)), "/SRPService");
+        SRPService srpService = new SRPService(filename);
+        context.addServlet(new ServletHolder(srpService), "/SRPService");
+        //needed for the access to the session cache
+        context.addServlet(new ServletHolder(new MetaService(filename, srpService)), "/MetaService");
 
     }
 

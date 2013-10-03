@@ -1,6 +1,8 @@
 package com.caucho.hessian.client;
 
+import java.io.UnsupportedEncodingException;
 import java.net.URL;
+import java.net.URLEncoder;
 
 public class HessianSRPProxy extends HessianProxy {
 
@@ -24,7 +26,11 @@ public class HessianSRPProxy extends HessianProxy {
     protected void addRequestHeaders(HessianConnection conn) {
         conn.addHeader("Content-Type", "x-application/hessian");
         if (m_SRPSession != null) {
-            conn.addHeader("SRPSession", m_SRPSession);
+            try {
+                conn.addHeader("SRPSession", URLEncoder.encode(m_SRPSession, "UTF-8"));
+            } catch (UnsupportedEncodingException e) {
+                e.printStackTrace();
+            }
         }
         String basicAuth = _factory.getBasicAuth();
 

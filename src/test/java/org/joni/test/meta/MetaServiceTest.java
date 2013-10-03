@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Proxy;
+import java.math.BigInteger;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -13,6 +15,9 @@ import javax.net.ssl.HttpsURLConnection;
 
 import junit.framework.TestCase;
 
+import org.bouncycastle.crypto.Digest;
+import org.bouncycastle.crypto.agreement.srp.SRP6Util;
+import org.bouncycastle.crypto.digests.SHA512Digest;
 import org.glite.security.trustmanager.ContextWrapper;
 import org.joni.test.meta.client.TMHostnameVerifier;
 import org.joni.test.meta.server.MetaServer;
@@ -25,6 +30,13 @@ import com.caucho.hessian.client.HessianSRPProxy;
 import com.caucho.hessian.client.HessianSRPProxyFactory;
 import com.caucho.hessian.client.TMHessianURLConnectionFactory;
 import com.eaio.uuid.UUID;
+
+import fi.hip.sicx.srp.Params;
+import fi.hip.sicx.srp.SRPAPI;
+import fi.hip.sicx.srp.SRPClient;
+import fi.hip.sicx.srp.SRPUtil;
+import fi.hip.sicx.srp.SessionKey;
+import fi.hip.sicx.srp.SessionToken;
 
 public class MetaServiceTest extends TestCase {
 
@@ -89,18 +101,48 @@ public class MetaServiceTest extends TestCase {
             props.load(new FileReader(configFile));
             ContextWrapper wrapper = new ContextWrapper(props, false);
             
-            TMHostnameVerifier verifier = new TMHostnameVerifier();         
+            TMHostnameVerifier hostVerifier = new TMHostnameVerifier();         
             
-            String url = "https://localhost:40666/MetaService";
+            String srpUrl = "https://localhost:40666/SRPService";
             HessianSRPProxyFactory factory = new HessianSRPProxyFactory();
             TMHessianURLConnectionFactory connectionFactory = new TMHessianURLConnectionFactory();
             connectionFactory.setWrapper(wrapper);
-            connectionFactory.setVerifier(verifier);
+            connectionFactory.setVerifier(hostVerifier);
             connectionFactory.setHessianProxyFactory(factory);
             factory.setConnectionFactory(connectionFactory);
+            SRPAPI srpService = (SRPAPI) factory.create(SRPAPI.class, srpUrl);
+            BigInteger N = Params.N;
+            BigInteger g = Params.g;
+
+            String name = "UserNamexxx";
+            String passwordString = "PassWordaaa";
+            
+            Digest digest = new SHA512Digest();
+            SecureRandom pseudoRandomGen = new SecureRandom();
+            
+            BigInteger random = SRP6Util.generatePrivateValue(digest, N, Params.g, pseudoRandomGen);
+            
+            int padLength = (N.bitLength() + 7) / 8;
+            
+            
+            byte salt[] = SRPUtil.getPadded(random, padLength);
+            byte identity[] = SRPUtil.stringBytes(name);
+            byte password[] = SRPUtil.stringBytes(passwordString);
+            
+            BigInteger x = SRP6Util.calculateX(digest, N, salt, identity, password);
+            
+            BigInteger verifier = g.modPow(x, N);
+            
+            System.out.println("salt: " + salt+ " identity: " +identity+ " verifier: "+ verifier);
+            
+            srpService.putVerifier(salt, identity, verifier);
+            
+            SessionKey key = SRPClient.login(srpService, identity, password);
+
+            String url = "https://localhost:40666/MetaService";
             MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
             HessianSRPProxy proxy = (HessianSRPProxy) Proxy.getInvocationHandler(service);
-            proxy.setSession("srpTest");
+            proxy.setSession(new SessionToken(identity, key.getK()).toString());
             
             UserInfo info = new UserInfo();
             info.setName(TEST_USER);
@@ -168,7 +210,7 @@ public class MetaServiceTest extends TestCase {
             HessianProxyFactory factory2 = new HessianProxyFactory();
             TMHessianURLConnectionFactory connectionFactory2 = new TMHessianURLConnectionFactory();
             connectionFactory.setWrapper(wrapper2);
-            connectionFactory.setVerifier(verifier);
+            connectionFactory.setVerifier(hostVerifier);
             connectionFactory.setHessianProxyFactory(factory2);
             factory2.setConnectionFactory(connectionFactory2);
             MetaDataAPI service2 = (MetaDataAPI) factory.create(MetaDataAPI.class, url);

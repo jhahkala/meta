@@ -5,11 +5,11 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Method;
+import java.net.URLDecoder;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Enumeration;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -19,7 +19,6 @@ import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpSession;
 
 import org.glite.security.util.DNHandler;
 import org.infinispan.Cache;
@@ -31,11 +30,15 @@ import org.joni.test.meta.SessionException;
 import org.joni.test.meta.UserInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jndi.JndiTemplate;
 
 import com.caucho.hessian.server.HessianServlet;
 import com.eaio.uuid.UUID;
 
-
+import fi.hip.sicx.srp.SRPService;
+import fi.hip.sicx.srp.Session;
+import fi.hip.sicx.srp.SessionToken;
+import fi.hip.sicx.srp.User;
 
 public class MetaService extends HessianServlet implements MetaDataAPI {
 
@@ -43,7 +46,7 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
     private static Logger logger = LoggerFactory.getLogger(MetaService.class);
     private static FileWriter writer;
     {
-        try{
+        try {
             writer = new FileWriter("testLog.txt");
         } catch (IOException e) {
             System.exit(1);
@@ -52,29 +55,33 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
     }
     private static final long serialVersionUID = 1L;
     private static DefaultCacheManager cacheManager = null;
+    private static DefaultCacheManager sessionCacheManager = null;
     private static Cache<UUID, MetaFile> cache = null;
     private static Cache<String, UserInfo> users = null;
+    private static Cache<String, User> sessions = null;;
     private static String _superUser = null;
     /** used to pass along the user certificate from servlet handling to the actual methods doing the work */
     private static ThreadLocal<X509Certificate[]> certStore = new ThreadLocal<X509Certificate[]>();
     public static final String CACHE_CONFIG_FILE_OPT = "cacheConfigFile";
     public static final String SUPER_USER_OPT = "superuser";
 
-    public MetaService(String configFile) throws IOException {
+    public MetaService(String configFile, SRPService srpService) throws IOException {
 
         File testFile = new File(configFile);
         if (!testFile.exists()) {
             throw new FileNotFoundException("Configuration file \"" + configFile + "\" not found.");
         }
         if (testFile.isDirectory()) {
-            throw new FileNotFoundException("The file \"" + configFile + "\" given as a configuration file is a directory!");
+            throw new FileNotFoundException("The file \"" + configFile
+                    + "\" given as a configuration file is a directory!");
         }
 
         Properties props = new Properties();
         props.load(new FileReader(configFile));
         String cacheConfig = props.getProperty(CACHE_CONFIG_FILE_OPT);
+        String sessionConfig = props.getProperty(SRPService.USERSLOGIN_CONFIG_FILE_OPT);
         String superUser = props.getProperty(SUPER_USER_OPT);
-        if(superUser == null){
+        if (superUser == null) {
             throw new IOException("No superuser setting found in the configuration file.");
         }
         _superUser = superUser;
@@ -83,60 +90,82 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
             throw new FileNotFoundException("Storage configuration file \"" + cacheConfig + "\" not found.");
         }
         if (testFile.isDirectory()) {
-            throw new FileNotFoundException("The file \"" + cacheConfig + "\" given as a storage configuration file is a directory!");
+            throw new FileNotFoundException("The file \"" + cacheConfig
+                    + "\" given as a storage configuration file is a directory!");
         }
         cacheManager = new DefaultCacheManager(cacheConfig);
         cache = cacheManager.getCache("meta");
         users = cacheManager.getCache("users");
+        sessions = srpService.getSessionCache();
     }
 
-    public void service(ServletRequest request, ServletResponse response)
-            throws IOException, ServletException{
+    public void service(ServletRequest request, ServletResponse response) throws IOException, ServletException {
         // Interpret the client's certificate.
         X509Certificate[] cert = (X509Certificate[]) request.getAttribute("javax.servlet.request.X509Certificate");
         certStore.set(cert);
         Enumeration attrs = request.getAttributeNames();
         System.out.println("Attributes:");
-        while (attrs.hasMoreElements()){
-            String attribute = (String)attrs.nextElement();
+        while (attrs.hasMoreElements()) {
+            String attribute = (String) attrs.nextElement();
             System.out.println("attribute: " + attribute + " value " + request.getAttribute(attribute));
         }
         System.out.println("Paramaters:");
         Enumeration params = request.getParameterNames();
-        while (params.hasMoreElements()){
-            String attribute = (String)params.nextElement();
-            System.out.println("paramater: " + attribute );
+        while (params.hasMoreElements()) {
+            String attribute = (String) params.nextElement();
+            System.out.println("paramater: " + attribute);
         }
-        if(request instanceof HttpServletRequest){
-            HttpSession session = ((HttpServletRequest)request).getSession();
-            HttpServletRequest sreg = (HttpServletRequest)request;
-            String SRPSession = sreg.getHeader("SRPSession");
+        if (request instanceof HttpServletRequest) {
+            // HttpSession session = ((HttpServletRequest)request).getSession();
+            HttpServletRequest sreg = (HttpServletRequest) request;
+            String SRPSessionEncoded = sreg.getHeader("SRPSession");
+            System.out.println("Session: " + SRPSessionEncoded);
+            String SRPSession = URLDecoder.decode(SRPSessionEncoded, "UTF-8");
             System.out.println("Session: " + SRPSession);
-//            username = (String) session.getAttribute(SPConfiguration.userIdKey);
-//            System.out.println("User : " + username + " accessing... ");
-        }else{
-//            username = null;
+            try {
+                SessionToken token = new SessionToken(SRPSession);
+                byte identity[] = token.getIdentity();
+                byte sessionId[] = token.getHash();
+                User user = sessions.get(identity);
+                if (user == null) {
+                    throw new IOException("Access denied.");
+                }
+                Session session = user.getSessions().get(sessionId);
+                if (session == null) {
+                    throw new IOException("Access is denied.");
+                }
+                session.isValid(sessionId);
+                System.out.println("User: " + new String(user.getIdentity()) + "valid");
+            } catch (Exception e) {
+                e.printStackTrace();
+                throw new IOException(e.getMessage(), e);
+            }
+
+            // username = (String) session.getAttribute(SPConfiguration.userIdKey);
+            // System.out.println("User : " + username + " accessing... ");
+        } else {
+            // username = null;
         }
-        super.service(request,response);
+        super.service(request, response);
     }
 
     private String getUser() throws SessionException {
         // Interpret the client's certificate.
         X509Certificate[] cert = certStore.get();
-        if(cert != null){
+        if (cert != null) {
             String user = DNHandler.getSubject(cert[0]).getRFCDNv2();
 
             return user;
         }
         throw new SessionException("No session found. Login to start a session.");
-        
+
     }
 
-//    @SuppressWarnings("unused")
-//    private boolean checkPermissionForNewRoot() {
-//        return _superUser.equals(getUser());
-//    }
-//
+    // @SuppressWarnings("unused")
+    // private boolean checkPermissionForNewRoot() {
+    // return _superUser.equals(getUser());
+    // }
+    //
     public void putFile(MetaFile newFile) throws IOException {
 
         if (newFile == null) {
@@ -149,12 +178,12 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
         UUID parentId = newFile.getParent();
         if (parentId == null) {
             // override, so that root can add other users roots
-            if(getUser().equals(_superUser)){
+            if (getUser().equals(_superUser)) {
                 cache.put(id, newFile);
                 return;
             }
             UserInfo info = users.get(getUser());
-            if(info == null){
+            if (info == null) {
                 throw new IOException("User " + getUser() + " does not exist in the system.");
             }
             List<UUID> roots = info.getRoots();
@@ -255,80 +284,80 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
     }
 
     public MetaFile getFileByPath(String path) throws IOException {
-    	// Lets find the metafile by searching from the root
-    	//System.out.println("GetFileByPath, finding path: " + path);
-    	
-    	if(path==null) {
-    		throw new NullPointerException("Null path parameter not allowed.");
-    	}else if(path.length() <= 0) {
-    		throw new IOException("Empty path parameter not allowed.");
-    	}
-    	
-    	// Get user
-    	UserInfo info = users.get(getUser());
-    	if(info == null) {
-    		throw new IOException("User " + getUser() + " does not exist in the system.");
-    	}
-    	
-    	// Get root directories
-    	List<UUID> roots = info.getRoots();
-    	if(roots == null) {
-    		throw new IOException("Root not found (null).");
-    	}else if(roots.size() <= 0) {
-    		throw new IOException("Root not found (size zero).");
-    	}
+        // Lets find the metafile by searching from the root
+        // System.out.println("GetFileByPath, finding path: " + path);
 
-    	// Go through the root directories until match is found
-    	MetaFile returnme = null;
-    	String token = null;
-    	String PATH_SEPARATOR = "/";
-    	StringTokenizer st = new StringTokenizer(path, PATH_SEPARATOR);
-    	//System.out.println("st: '" + path + "' and st.size =" + st.countTokens());
-    	// Resolve first the root
-    	if(st.hasMoreTokens()) {
-    		token = st.nextToken();
-    		for (UUID uuid: roots) {
-    			MetaFile file = cache.get(uuid);
-    			if (file.getName().equals(token)) {
-    				returnme = file;
-    				break;
-    			}
-    		}
-    	}
-    	if(returnme == null) {
-    		//throw new FileNotFoundException("Root '" + token + "' not found");
-    		return null;
-    	}
+        if (path == null) {
+            throw new NullPointerException("Null path parameter not allowed.");
+        } else if (path.length() <= 0) {
+            throw new IOException("Empty path parameter not allowed.");
+        }
+
+        // Get user
+        UserInfo info = users.get(getUser());
+        if (info == null) {
+            throw new IOException("User " + getUser() + " does not exist in the system.");
+        }
+
+        // Get root directories
+        List<UUID> roots = info.getRoots();
+        if (roots == null) {
+            throw new IOException("Root not found (null).");
+        } else if (roots.size() <= 0) {
+            throw new IOException("Root not found (size zero).");
+        }
+
+        // Go through the root directories until match is found
+        MetaFile returnme = null;
+        String token = null;
+        String PATH_SEPARATOR = "/";
+        StringTokenizer st = new StringTokenizer(path, PATH_SEPARATOR);
+        // System.out.println("st: '" + path + "' and st.size =" + st.countTokens());
+        // Resolve first the root
+        if (st.hasMoreTokens()) {
+            token = st.nextToken();
+            for (UUID uuid : roots) {
+                MetaFile file = cache.get(uuid);
+                if (file.getName().equals(token)) {
+                    returnme = file;
+                    break;
+                }
+            }
+        }
+        if (returnme == null) {
+            // throw new FileNotFoundException("Root '" + token + "' not found");
+            return null;
+        }
         if (!ACLHandler.hasReadAccess(getUser(), returnme.getACL())) {
             throw new IOException("Access denied: '" + path + "'.");
         }
-    	
-    	// Find similarly rest of the path
-    	while (st.hasMoreTokens()) {
+
+        // Find similarly rest of the path
+        while (st.hasMoreTokens()) {
             if (!ACLHandler.hasReadAccess(getUser(), returnme.getACL())) {
                 throw new IOException("Access denied: '" + path + "'.");
             }
-    		List<UUID> uidlist = returnme.listFiles();
-    		if (uidlist == null) {
-    			throw new FileNotFoundException("Path not found: '" + path + "'.");
-    		}
-    		token = st.nextToken();
-    		returnme = null;
-    		for (UUID uuid : uidlist) {
-    			MetaFile file = cache.get(uuid);
-    			if (file.getName().equals(token)) {
-    				returnme = file;
-    				continue;
-    			}
-			}
-    		if(returnme == null) {
-    			throw new FileNotFoundException("Path '" + token + "' not found of path '" + path + "'");
-    		}
-    	}
-	   	
-    	return returnme;        
+            List<UUID> uidlist = returnme.listFiles();
+            if (uidlist == null) {
+                throw new FileNotFoundException("Path not found: '" + path + "'.");
+            }
+            token = st.nextToken();
+            returnme = null;
+            for (UUID uuid : uidlist) {
+                MetaFile file = cache.get(uuid);
+                if (file.getName().equals(token)) {
+                    returnme = file;
+                    continue;
+                }
+            }
+            if (returnme == null) {
+                throw new FileNotFoundException("Path '" + token + "' not found of path '" + path + "'");
+            }
+        }
+
+        return returnme;
     }
-    
+
     public MetaFile getFile(UUID id) throws IOException {
         if (id == null) {
             throw new NullPointerException("Cannot find a file that is null");
@@ -349,12 +378,14 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
                 if (!ACLHandler.hasReadAccess(getUser(), parent.getACL())) {
                     throw new IOException("Access denied to directory: " + parent.getName());
                 }
-            } catch (IllegalArgumentException e){
-                if (getUser() == null){
-                    throw new IllegalArgumentException("When accessing: " + parent.getName() + " user was null, which should not happen.");
+            } catch (IllegalArgumentException e) {
+                if (getUser() == null) {
+                    throw new IllegalArgumentException("When accessing: " + parent.getName()
+                            + " user was null, which should not happen.");
                 }
-                if (parent.getACL() == null){
-                    throw new IllegalArgumentException("When accessing: " + parent.getName() + " the ACL was null, which should not happen.");
+                if (parent.getACL() == null) {
+                    throw new IllegalArgumentException("When accessing: " + parent.getName()
+                            + " the ACL was null, which should not happen.");
                 }
                 throw e;
             }
@@ -377,7 +408,7 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
         }
         MetaFile current = cache.get(id);
         if (current == null) {
-            throw new FileNotFoundException("File not found"); 
+            throw new FileNotFoundException("File not found");
         }
         UUID parentId = current.getParent();
         if (parentId == null) {
@@ -446,7 +477,7 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
     public void addUser(UserInfo userInfo) throws IOException {
         String user = getUser();
         if (user.equals(_superUser) || userInfo.getName().equals(user)) {
-            if(users.get(userInfo.getName()) != null){
+            if (users.get(userInfo.getName()) != null) {
                 throw new IOException("User " + userInfo.getName() + " already exists!");
             }
             users.put(userInfo.getName(), userInfo);
@@ -468,10 +499,10 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
         if (getUser().equals(oldUser.getName())) {
             users.put(userInfo.getName(), userInfo);
         } else {
-            if(getUser().equals(_superUser)){
+            if (getUser().equals(_superUser)) {
                 users.put(userInfo.getName(), userInfo);
             } else {
-                throw new IOException ("Access denied.");
+                throw new IOException("Access denied.");
             }
         }
     }
