@@ -9,7 +9,9 @@ import java.lang.reflect.Method;
 import java.net.URLDecoder;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -19,6 +21,7 @@ import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import org.glite.security.util.DNHandler;
 import org.infinispan.Cache;
@@ -64,6 +67,7 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
     private static ThreadLocal<X509Certificate[]> certStore = new ThreadLocal<X509Certificate[]>();
     public static final String CACHE_CONFIG_FILE_OPT = "cacheConfigFile";
     public static final String SUPER_USER_OPT = "superuser";
+    private static ThreadLocal<String> username = new ThreadLocal<String>();
 
     public MetaService(String configFile, SRPService srpService) throws IOException {
 
@@ -93,7 +97,9 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
             throw new FileNotFoundException("The file \"" + cacheConfig
                     + "\" given as a storage configuration file is a directory!");
         }
-        cacheManager = new DefaultCacheManager(cacheConfig);
+        if (cacheManager == null) {
+            cacheManager = new DefaultCacheManager(cacheConfig);
+        }
         cache = cacheManager.getCache("meta");
         users = cacheManager.getCache("users");
         sessions = srpService.getSessionCache();
@@ -116,29 +122,48 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
             System.out.println("paramater: " + attribute);
         }
         if (request instanceof HttpServletRequest) {
+            username.set(null);
             // HttpSession session = ((HttpServletRequest)request).getSession();
             HttpServletRequest sreg = (HttpServletRequest) request;
             String SRPSessionEncoded = sreg.getHeader("SRPSession");
             System.out.println("Session: " + SRPSessionEncoded);
-            String SRPSession = URLDecoder.decode(SRPSessionEncoded, "UTF-8");
-            System.out.println("Session: " + SRPSession);
             try {
+                if (SRPSessionEncoded == null) {
+                    throw new IOException("No session, please log in.");
+                }
+                String SRPSession;
+                try {
+                    SRPSession = URLDecoder.decode(SRPSessionEncoded, "UTF-8");
+                } catch (Exception e) {
+                    throw new IOException("Invalid Session token.");
+                }
+
                 SessionToken token = new SessionToken(SRPSession);
                 byte identity[] = token.getIdentity();
                 byte sessionId[] = token.getHash();
-                User user = sessions.get(identity);
+                User user = sessions.get(new String(identity));
                 if (user == null) {
                     throw new IOException("Access denied.");
                 }
-                Session session = user.getSessions().get(sessionId);
+                List<Session> list = user.getSessions();
+                for (Session session : list) {
+                    System.out.println("session: " + new String(session._sessionId));
+                }
+                Session session = user.findSession(sessionId);
                 if (session == null) {
                     throw new IOException("Access is denied.");
                 }
-                session.isValid(sessionId);
+                if (!session.isValid(sessionId)) {
+                    throw new IOException("Session is not valid.");
+                }
                 System.out.println("User: " + new String(user.getIdentity()) + "valid");
+                username.set(new String(user.getIdentity()));
             } catch (Exception e) {
+                System.out.println("Exception: " + e.getMessage());
+                HttpServletResponse httpResponse = (HttpServletResponse) response;
+                httpResponse.sendError(401, e.getMessage());
                 e.printStackTrace();
-                throw new IOException(e.getMessage(), e);
+                return;
             }
 
             // username = (String) session.getAttribute(SPConfiguration.userIdKey);
@@ -150,6 +175,10 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
     }
 
     private String getUser() throws SessionException {
+        String userString = username.get();
+        if (userString != null) {
+            return userString;
+        }
         // Interpret the client's certificate.
         X509Certificate[] cert = certStore.get();
         if (cert != null) {

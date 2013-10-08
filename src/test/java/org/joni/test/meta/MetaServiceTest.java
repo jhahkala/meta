@@ -4,8 +4,6 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Proxy;
-import java.math.BigInteger;
-import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -15,9 +13,6 @@ import javax.net.ssl.HttpsURLConnection;
 
 import junit.framework.TestCase;
 
-import org.bouncycastle.crypto.Digest;
-import org.bouncycastle.crypto.agreement.srp.SRP6Util;
-import org.bouncycastle.crypto.digests.SHA512Digest;
 import org.glite.security.trustmanager.ContextWrapper;
 import org.joni.test.meta.client.TMHostnameVerifier;
 import org.joni.test.meta.server.MetaServer;
@@ -31,7 +26,6 @@ import com.caucho.hessian.client.HessianSRPProxyFactory;
 import com.caucho.hessian.client.TMHessianURLConnectionFactory;
 import com.eaio.uuid.UUID;
 
-import fi.hip.sicx.srp.Params;
 import fi.hip.sicx.srp.SRPAPI;
 import fi.hip.sicx.srp.SRPClient;
 import fi.hip.sicx.srp.SRPUtil;
@@ -40,8 +34,10 @@ import fi.hip.sicx.srp.SessionToken;
 
 public class MetaServiceTest extends TestCase {
 
-    public static final String TEST_USER = "CN=trusted client,OU=Relaxation,O=Utopia,L=Tropic,C=UG";
-    public static final String TEST_USER2 = "CN=trusted clientserver,OU=Relaxation,O=Utopia,L=Tropic,C=UG";
+    public static final String TEST_USER = "USerNAmssfedfs";
+    public static final String TEST_USER_PW = "PassWordaa";
+    public static final String TEST_USER2 = "2userNNAamee";
+    public static final String TEST_USER2_PW = "passslkjlkj";
     public static final String TRUSTED_CLIENT_CONFIG_FILE = "src/test/meta-client-trusted.conf";
     public static final String TRUSTED_CLIENT2_CONFIG_FILE = "src/test/meta-client2-trusted.conf";
     public static final String SERVER_PURGE_CONFIG_FILE = "src/test/meta-purge.conf";
@@ -70,7 +66,7 @@ public class MetaServiceTest extends TestCase {
         // e.printStackTrace();
         // }
     }
-    
+
     public void setup() throws Exception {
         server = new MetaServer();
         server.configure(SERVER_PURGE_CONFIG_FILE);
@@ -80,8 +76,8 @@ public class MetaServiceTest extends TestCase {
         props.load(new FileReader(configFile));
         ContextWrapper wrapper = new ContextWrapper(props, false);
         HttpsURLConnection.setDefaultSSLSocketFactory(wrapper.getSocketFactory());
-        HttpsURLConnection.setDefaultHostnameVerifier(new TMHostnameVerifier());         
-        
+        HttpsURLConnection.setDefaultHostnameVerifier(new TMHostnameVerifier());
+
     }
 
     /**
@@ -94,48 +90,16 @@ public class MetaServiceTest extends TestCase {
             server = new MetaServer();
             server.configure(SERVER_PURGE_CONFIG_FILE);
             server.start();
-            
+            System.out.println("--------------fileput----------");
             // client
-            File configFile = new File(TRUSTED_CLIENT_CONFIG_FILE);
-            Properties props = new Properties();
-            props.load(new FileReader(configFile));
-            ContextWrapper wrapper = new ContextWrapper(props, false);
-            
-            TMHostnameVerifier hostVerifier = new TMHostnameVerifier();         
-            
+            HessianSRPProxyFactory factory = HessianSRPProxyFactory.getFactory(TRUSTED_CLIENT_CONFIG_FILE);
             String srpUrl = "https://localhost:40666/SRPService";
-            HessianSRPProxyFactory factory = new HessianSRPProxyFactory();
-            TMHessianURLConnectionFactory connectionFactory = new TMHessianURLConnectionFactory();
-            connectionFactory.setWrapper(wrapper);
-            connectionFactory.setVerifier(hostVerifier);
-            connectionFactory.setHessianProxyFactory(factory);
-            factory.setConnectionFactory(connectionFactory);
             SRPAPI srpService = (SRPAPI) factory.create(SRPAPI.class, srpUrl);
-            BigInteger N = Params.N;
-            BigInteger g = Params.g;
-
-            String name = "UserNamexxx";
-            String passwordString = "PassWordaaa";
             
-            Digest digest = new SHA512Digest();
-            SecureRandom pseudoRandomGen = new SecureRandom();
+            SRPClient.putVerifier(srpService, TEST_USER, TEST_USER_PW);
             
-            BigInteger random = SRP6Util.generatePrivateValue(digest, N, Params.g, pseudoRandomGen);
-            
-            int padLength = (N.bitLength() + 7) / 8;
-            
-            
-            byte salt[] = SRPUtil.getPadded(random, padLength);
-            byte identity[] = SRPUtil.stringBytes(name);
-            byte password[] = SRPUtil.stringBytes(passwordString);
-            
-            BigInteger x = SRP6Util.calculateX(digest, N, salt, identity, password);
-            
-            BigInteger verifier = g.modPow(x, N);
-            
-            System.out.println("salt: " + salt+ " identity: " +identity+ " verifier: "+ verifier);
-            
-            srpService.putVerifier(salt, identity, verifier);
+            byte identity[] = SRPUtil.stringBytes(TEST_USER);
+            byte password[] = SRPUtil.stringBytes(TEST_USER_PW);
             
             SessionKey key = SRPClient.login(srpService, identity, password);
 
@@ -143,11 +107,11 @@ public class MetaServiceTest extends TestCase {
             MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
             HessianSRPProxy proxy = (HessianSRPProxy) Proxy.getInvocationHandler(service);
             proxy.setSession(new SessionToken(identity, key.getK()).toString());
-            
+
             UserInfo info = new UserInfo();
             info.setName(TEST_USER);
             service.addUser(info);
-            
+
             boolean exception = false;
             try {
                 service.putFile(null);
@@ -199,22 +163,18 @@ public class MetaServiceTest extends TestCase {
             assertTrue(exception);
 
             // client
-            File config2File = new File(TRUSTED_CLIENT2_CONFIG_FILE);
-            Properties props2 = new Properties();
-            props2.load(new FileReader(config2File));
-            ContextWrapper wrapper2 = new ContextWrapper(props2, false);
+            HessianSRPProxyFactory factory2 = HessianSRPProxyFactory.getFactory(TRUSTED_CLIENT2_CONFIG_FILE);
+            MetaDataAPI service2 = (MetaDataAPI) factory2.create(MetaDataAPI.class, url);
+            SRPClient.putVerifier(srpService, TEST_USER2, TEST_USER2_PW);
             
-            // reuse previous //TMHostnameVerifier verifier = new TMHostnameVerifier();         
+            byte identity2[] = SRPUtil.stringBytes(TEST_USER2);
+            byte password2[] = SRPUtil.stringBytes(TEST_USER2_PW);
             
-            //String url = "https://localhost:40666/MetaService";
-            HessianProxyFactory factory2 = new HessianProxyFactory();
-            TMHessianURLConnectionFactory connectionFactory2 = new TMHessianURLConnectionFactory();
-            connectionFactory.setWrapper(wrapper2);
-            connectionFactory.setVerifier(hostVerifier);
-            connectionFactory.setHessianProxyFactory(factory2);
-            factory2.setConnectionFactory(connectionFactory2);
-            MetaDataAPI service2 = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
-            
+            SessionKey key2 = SRPClient.login(srpService, identity2, password2);
+            HessianSRPProxy proxy2 = (HessianSRPProxy) Proxy.getInvocationHandler(service2);
+            proxy2.setSession(new SessionToken(identity2, key2.getK()).toString());
+
+
             MetaFile subdirFail = new MetaFileImpl();
             subdirFail.setDirectory(true);
             subdirFail.setName("subdirfail");
@@ -222,7 +182,7 @@ public class MetaServiceTest extends TestCase {
             exception = false;
             try { // fail adding new root as not superuser
                 service2.putFile(subdirFail);
-            } catch (IOException e) {
+            } catch (Exception e) {
                 exception = true;
             }
             assertTrue(exception);
@@ -231,14 +191,14 @@ public class MetaServiceTest extends TestCase {
             exception = false;
             try { // fail adding subdir to root no access superuser
                 service2.putFile(subdirFail);
-            } catch (IOException e) {
+            } catch (Exception e) {
                 exception = true;
             }
             assertTrue(exception);
-            
-            subdirFail.setParent(subdir.getId());
-            service2.putFile(subdirFail);
-            
+
+            // subdirFail.setParent(subdir.getId());
+            // service2.putFile(subdirFail);
+
         } finally {
             if (server != null) {
                 server.stop();
@@ -251,7 +211,7 @@ public class MetaServiceTest extends TestCase {
     public void testFileUpdate() throws Exception {
         try {
             setup();
-            
+
             String url = "https://localhost:40666/MetaService";
             HessianProxyFactory factory = new HessianProxyFactory();
             MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
@@ -266,9 +226,9 @@ public class MetaServiceTest extends TestCase {
             root.addACLItem(new ACLItem(TEST_USER, true, true));
             service.putFile(root);
 
-//            UserInfo user = service.getUserInfo();
-//            MetaFile root = service.getFile(user.getRoots().get(0));
-            
+            // UserInfo user = service.getUserInfo();
+            // MetaFile root = service.getFile(user.getRoots().get(0));
+
             MetaFileImpl subdir = new MetaFileImpl();
             subdir.setName("subdir");
             subdir.setDirectory(true);
@@ -289,7 +249,7 @@ public class MetaServiceTest extends TestCase {
             service.putFile(subfile);
 
             List<MetaFile> files = new ArrayList<MetaFile>();
-                files = service.getListFile(root.getId());
+            files = service.getListFile(root.getId());
             for (MetaFile file : files) {
                 System.out.println("ls root: " + file);
             }
@@ -337,59 +297,61 @@ public class MetaServiceTest extends TestCase {
             }
             assertTrue(exception);
 
-//            service.updateFile(root.removeACLItem(0).addACLItem(new ACLItem(TEST_USER, false, false)));
-//            exception = false;
-//            try {
-//                service.updateFile(subdir.setName("subdirv2").setParent(root.getId()));
-//
-//            } catch (IOException e) {
-//                System.out.println(e.getMessage());
-//                exception = true;
-//            }
-//            assertTrue(exception);
+            // service.updateFile(root.removeACLItem(0).addACLItem(new ACLItem(TEST_USER, false, false)));
+            // exception = false;
+            // try {
+            // service.updateFile(subdir.setName("subdirv2").setParent(root.getId()));
+            //
+            // } catch (IOException e) {
+            // System.out.println(e.getMessage());
+            // exception = true;
+            // }
+            // assertTrue(exception);
 
-//            exception = false;
-//            try {
-//                service.updateFile(root.setName("rootv2"));
-//
-//            } catch (IOException e) {
-//                exception = true;
-//            }
-//            assertTrue(exception);
+            // exception = false;
+            // try {
+            // service.updateFile(root.setName("rootv2"));
+            //
+            // } catch (IOException e) {
+            // exception = true;
+            // }
+            // assertTrue(exception);
 
-//            root = new MetaFileImpl();
-//            root.setDirectory(true);
-//            root.setName("root");
-//            root.addACLItem(new ACLItem(TEST_USER, true, true));
-//            service.putFile(root);
-//
-//            subdir = new MetaFileImpl();
-//            subdir.setName("subdir");
-//            subdir.setDirectory(true);
-//            subdir.setParent(root.getId());
-//            subdir.addACLItem(new ACLItem(TEST_USER, true, true));
-//            service.putFile(subdir);
-//
-//            MetaFile subsubdir = new MetaFileImpl();
-//            subsubdir.setName("subsubdir");
-//            subsubdir.setDirectory(true);
-//            subsubdir.setParent(subdir.getId());
-//            subsubdir.addACLItem(new ACLItem(TEST_USER, true, true));
-//            service.putFile(subsubdir);
-//            service.updateFile(subdir.setName("newsub"));
-//
-//            service.deleteFile(subdir.getId());
-//            exception = false;
-//            try {
-//                service.updateFile(subsubdir.setName("newsub"));
-//
-//            } catch (IOException e) {
-//                exception = true;
-//            }
-//            assertTrue(exception);
+            // root = new MetaFileImpl();
+            // root.setDirectory(true);
+            // root.setName("root");
+            // root.addACLItem(new ACLItem(TEST_USER, true, true));
+            // service.putFile(root);
+            //
+            // subdir = new MetaFileImpl();
+            // subdir.setName("subdir");
+            // subdir.setDirectory(true);
+            // subdir.setParent(root.getId());
+            // subdir.addACLItem(new ACLItem(TEST_USER, true, true));
+            // service.putFile(subdir);
+            //
+            // MetaFile subsubdir = new MetaFileImpl();
+            // subsubdir.setName("subsubdir");
+            // subsubdir.setDirectory(true);
+            // subsubdir.setParent(subdir.getId());
+            // subsubdir.addACLItem(new ACLItem(TEST_USER, true, true));
+            // service.putFile(subsubdir);
+            // service.updateFile(subdir.setName("newsub"));
+            //
+            // service.deleteFile(subdir.getId());
+            // exception = false;
+            // try {
+            // service.updateFile(subsubdir.setName("newsub"));
+            //
+            // } catch (IOException e) {
+            // exception = true;
+            // }
+            // assertTrue(exception);
 
         } finally {
-            server.stop();
+            if (server != null) {
+                server.stop();
+            }
         }
     }
 
@@ -398,7 +360,7 @@ public class MetaServiceTest extends TestCase {
         try {
 
             setup();
-            
+
             String url = "https://localhost:40666/MetaService";
             HessianProxyFactory factory = new HessianProxyFactory();
             MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
@@ -486,25 +448,27 @@ public class MetaServiceTest extends TestCase {
             assertTrue(exception);
 
         } finally {
-            server.stop();
+            if (server != null) {
+                server.stop();
+            }
         }
     }
 
-    //@SuppressWarnings("null")
+    // @SuppressWarnings("null")
     @SuppressWarnings("null")
     @Test
     public void testGetByPath() throws Exception {
         try {
 
             setup();
-            
+
             String url = "https://localhost:40666/MetaService";
             HessianProxyFactory factory = new HessianProxyFactory();
             MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
 
             boolean exception = false;
             try {
-                service.getFileByPath((String)null);
+                service.getFileByPath((String) null);
             } catch (NullPointerException e) {
                 exception = true;
             }
@@ -518,16 +482,14 @@ public class MetaServiceTest extends TestCase {
             }
             assertTrue(exception);
 
-            String drootdir = "root", 
-            	    dsubdir = "/root/subdir", 
-            	 dsubsubdir = "/root/subdir/subdir";
-            
+            String drootdir = "root", dsubdir = "/root/subdir", dsubsubdir = "/root/subdir/subdir";
+
             MetaFile root = new MetaFileImpl();
             root.setDirectory(true);
             root.setName(drootdir);
             root.addACLItem(new ACLItem(TEST_USER, true, true));
             service.putFile(root);
-            
+
             MetaFileImpl subdir = new MetaFileImpl();
             subdir.setDirectory(true);
             subdir.setName("subdir");
@@ -548,9 +510,9 @@ public class MetaServiceTest extends TestCase {
             List<UUID> roots = new ArrayList<UUID>();
             roots.add(root.getId());
             info.setRoots(roots);
-            assertTrue(info.getRoots().size()==1);
+            assertTrue(info.getRoots().size() == 1);
             service.addUser(info);
-            
+
             // check that nonexistent file delete fails also when some files exists
             exception = false;
             try {
@@ -576,8 +538,8 @@ public class MetaServiceTest extends TestCase {
 
             // Check that "/" returns null
             assertTrue(service.getFileByPath("/") == null);
-            
-            service.deleteFile(subdir.getId());            
+
+            service.deleteFile(subdir.getId());
             // check that nonexistent file delete fails also when some files exists
             exception = false;
             try {
@@ -612,17 +574,19 @@ public class MetaServiceTest extends TestCase {
             assertTrue(exception);
 
         } finally {
-            server.stop();
+            if (server != null) {
+                server.stop();
+            }
         }
     }
-    
+
     @SuppressWarnings("null")
     @Test
     public void testGet() throws Exception {
         try {
 
             setup();
-            
+
             String url = "https://localhost:40666/MetaService";
             HessianProxyFactory factory = new HessianProxyFactory();
             MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
@@ -633,7 +597,7 @@ public class MetaServiceTest extends TestCase {
 
             boolean exception = false;
             try {
-                service.getFile((UUID)null);
+                service.getFile((UUID) null);
 
             } catch (NullPointerException e) {
                 exception = true;
@@ -738,7 +702,9 @@ public class MetaServiceTest extends TestCase {
             assertTrue(exception);
 
         } finally {
-            server.stop();
+            if (server != null) {
+                server.stop();
+            }
         }
     }
 
@@ -748,7 +714,7 @@ public class MetaServiceTest extends TestCase {
         try {
 
             setup();
-            
+
             String url = "https://localhost:40666/MetaService";
             HessianProxyFactory factory = new HessianProxyFactory();
             MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
@@ -836,8 +802,8 @@ public class MetaServiceTest extends TestCase {
             } catch (IOException e) {
                 exception = true;
             }
-// superuser has access, need to test with another user...            
-//            assertTrue(exception);
+            // superuser has access, need to test with another user...
+            // assertTrue(exception);
             List<MetaFile> testsubdirList = service.getListFile(subdir.getId());
             assertTrue(testsubdirList != null);
             assertTrue(testsubdirList.get(0).listFiles() == null);
@@ -857,10 +823,13 @@ public class MetaServiceTest extends TestCase {
             } catch (IOException e) {
                 exception = true;
             }
-// superuser has access, need to test with another user...            
-//            assertTrue(exception);
+            // superuser has access, need to test with another user...
+            // assertTrue(exception);
         } finally {
-            server.stop();
+            System.out.println("Stopping");
+            if (server != null) {
+                server.stop();
+            }
         }
     }
 
@@ -869,15 +838,15 @@ public class MetaServiceTest extends TestCase {
         try {
 
             setup();
-            
+
             // client
             File configFile = new File(TRUSTED_CLIENT_CONFIG_FILE);
             Properties props = new Properties();
             props.load(new FileReader(configFile));
             ContextWrapper wrapper = new ContextWrapper(props, false);
-            
-            TMHostnameVerifier verifier = new TMHostnameVerifier();         
-            
+
+            TMHostnameVerifier verifier = new TMHostnameVerifier();
+
             String url = "https://sicx1.hip.helsinki.fi:40666/MetaService";
             HessianProxyFactory factory = new HessianProxyFactory();
             TMHessianURLConnectionFactory connectionFactory = new TMHessianURLConnectionFactory();
@@ -886,7 +855,6 @@ public class MetaServiceTest extends TestCase {
             connectionFactory.setHessianProxyFactory(factory);
             factory.setConnectionFactory(connectionFactory);
             MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
-
 
             UserInfo info = new UserInfo();
             info.setName(TEST_USER);
@@ -930,16 +898,18 @@ public class MetaServiceTest extends TestCase {
             System.out.println("time for " + i + " rounds of ls : " + (stop.getTime() - start.getTime()));
 
         } finally {
-            //server.stop();
+            if (server != null) {
+                server.stop();
+            }
         }
     }
 
-//    @Test
+    // @Test
     public void testFile() throws Exception {
         try {
 
             setup();
-            
+
             String url = "https://localhost:40666/MetaService";
             HessianProxyFactory factory = new HessianProxyFactory();
             MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
@@ -995,7 +965,9 @@ public class MetaServiceTest extends TestCase {
                 System.out.println("ls subdir: " + file);
             }
         } finally {
-            server.stop();
+            if (server != null) {
+                server.stop();
+            }
         }
     }
 
@@ -1005,14 +977,14 @@ public class MetaServiceTest extends TestCase {
         try {
 
             setup();
-            
+
             String url = "https://localhost:40666/MetaService";
             HessianProxyFactory factory = new HessianProxyFactory();
             MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
 
-//            UserInfo info = new UserInfo();
-//            info.setName(TEST_USER);
-//            service.addUser(info);
+            // UserInfo info = new UserInfo();
+            // info.setName(TEST_USER);
+            // service.addUser(info);
 
             boolean exception = false;
             try {
@@ -1031,13 +1003,13 @@ public class MetaServiceTest extends TestCase {
                 exception = true;
             }
             assertTrue(exception);
-            
+
             UserInfo info = new UserInfo();
             info.setName(TEST_USER);
-            
+
             String rootName = "testingRoot";
             MetaFile root = null;
-            if(rootName != null){
+            if (rootName != null) {
                 root = new MetaFileImpl();
                 root.setDirectory(true);
                 root.setName(rootName);
@@ -1046,19 +1018,19 @@ public class MetaServiceTest extends TestCase {
                 roots.add(root.getId());
                 info.setRoots(roots);
             }
-            
+
             service.addUser(info);
-            
+
             UserInfo testUser = service.getOtherUserInfo(TEST_USER2);
-            
+
             assertNull(testUser);
-            
+
             UserInfo info2 = new UserInfo();
             info2.setName(TEST_USER2);
-            
+
             String rootName2 = "testingRoot2";
             MetaFile root2 = null;
-            if(rootName2 != null){
+            if (rootName2 != null) {
                 root2 = new MetaFileImpl();
                 root2.setDirectory(true);
                 root2.setName(rootName2);
@@ -1067,16 +1039,18 @@ public class MetaServiceTest extends TestCase {
                 roots.add(root2.getId());
                 info2.setRoots(roots);
             }
-            
+
             service.addUser(info2);
-            
+
             assertNotNull(service.getOtherUserInfo(TEST_USER2));
-            
+
             @SuppressWarnings("unused")
             UserInfo user3 = service.getUserInfo();
 
         } finally {
-            server.stop();
+            if (server != null) {
+                server.stop();
+            }
         }
     }
 

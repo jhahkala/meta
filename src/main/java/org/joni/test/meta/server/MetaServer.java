@@ -31,6 +31,7 @@ public class MetaServer {
     
     public void stop() throws Exception{
         if(_server != null){
+            System.out.println("server stopping");
             _server.stop();
         }
     }
