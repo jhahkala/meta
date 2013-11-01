@@ -156,7 +156,7 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
                 if (!session.isValid(sessionId)) {
                     throw new IOException("Session is not valid.");
                 }
-                System.out.println("User: " + new String(user.getIdentity()) + "valid");
+                System.out.println("User " + new String(user.getIdentity()) + " is valid");
                 username.set(new String(user.getIdentity()));
             } catch (Exception e) {
                 System.out.println("Exception: " + e.getMessage());
