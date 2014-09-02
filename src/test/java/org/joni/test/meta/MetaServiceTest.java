@@ -454,8 +454,6 @@ public class MetaServiceTest extends TestCase {
         }
     }
 
-    // @SuppressWarnings("null")
-    @SuppressWarnings("null")
     @Test
     public void testGetByPath() throws Exception {
         try {
@@ -580,7 +578,6 @@ public class MetaServiceTest extends TestCase {
         }
     }
 
-    @SuppressWarnings("null")
     @Test
     public void testGet() throws Exception {
         try {
@@ -708,7 +705,6 @@ public class MetaServiceTest extends TestCase {
         }
     }
 
-    @SuppressWarnings("null")
     @Test
     public void testGetListFile() throws Exception {
         try {
@@ -971,7 +967,6 @@ public class MetaServiceTest extends TestCase {
         }
     }
 
-    @SuppressWarnings("null")
     @Test
     public void testGetUserArg() throws Exception {
         try {
@@ -1014,7 +1009,7 @@ public class MetaServiceTest extends TestCase {
                 root.setDirectory(true);
                 root.setName(rootName);
                 root.addACLItem(new ACLItem(TEST_USER, true, true));
-                List<UUID> roots = new ArrayList();
+                List<UUID> roots = new ArrayList<UUID>();
                 roots.add(root.getId());
                 info.setRoots(roots);
             }
@@ -1035,7 +1030,7 @@ public class MetaServiceTest extends TestCase {
                 root2.setDirectory(true);
                 root2.setName(rootName2);
                 root2.addACLItem(new ACLItem(TEST_USER, true, true));
-                List<UUID> roots = new ArrayList();
+                List<UUID> roots = new ArrayList<UUID>();
                 roots.add(root2.getId());
                 info2.setRoots(roots);
             }

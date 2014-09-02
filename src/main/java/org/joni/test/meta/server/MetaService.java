@@ -5,15 +5,11 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.net.URLDecoder;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.StringTokenizer;
 
@@ -33,7 +29,6 @@ import org.joni.test.meta.SessionException;
 import org.joni.test.meta.UserInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jndi.JndiTemplate;
 
 import com.caucho.hessian.server.HessianServlet;
 import com.eaio.uuid.UUID;
@@ -109,14 +104,14 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
         // Interpret the client's certificate.
         X509Certificate[] cert = (X509Certificate[]) request.getAttribute("javax.servlet.request.X509Certificate");
         certStore.set(cert);
-        Enumeration attrs = request.getAttributeNames();
+        Enumeration<String> attrs = request.getAttributeNames();
         System.out.println("Attributes:");
         while (attrs.hasMoreElements()) {
             String attribute = (String) attrs.nextElement();
             System.out.println("attribute: " + attribute + " value " + request.getAttribute(attribute));
         }
         System.out.println("Paramaters:");
-        Enumeration params = request.getParameterNames();
+        Enumeration<String> params = request.getParameterNames();
         while (params.hasMoreElements()) {
             String attribute = (String) params.nextElement();
             System.out.println("paramater: " + attribute);
@@ -495,8 +490,6 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
             writer.flush();
             return users.get(getUser());
         } catch (IOException e) {
-            System.exit(1);
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
         return null;

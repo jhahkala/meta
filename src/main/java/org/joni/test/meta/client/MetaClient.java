@@ -19,7 +19,6 @@ import org.joni.test.meta.SLA;
 import org.joni.test.meta.UserInfo;
 
 import com.beust.jcommander.JCommander;
-import com.caucho.hessian.client.HessianProxyFactory;
 import com.caucho.hessian.client.HessianSRPProxy;
 import com.caucho.hessian.client.HessianSRPProxyFactory;
 import com.caucho.hessian.client.TMHessianURLConnectionFactory;
@@ -111,7 +110,7 @@ public class MetaClient {
             root.setDirectory(true);
             root.setName(add.root);
             root.addACLItem(new ACLItem(add.name, true, true));
-            List<UUID> roots = new ArrayList();
+            List<UUID> roots = new ArrayList<UUID>();
             roots.add(root.getId());
             info.setRoots(roots);
             if(add.sla != null){
