@@ -71,8 +71,7 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
             throw new FileNotFoundException("Configuration file \"" + configFile + "\" not found.");
         }
         if (testFile.isDirectory()) {
-            throw new FileNotFoundException("The file \"" + configFile
-                    + "\" given as a configuration file is a directory!");
+            throw new FileNotFoundException("The file \"" + configFile + "\" given as a configuration file is a directory!");
         }
 
         Properties props = new Properties();
@@ -89,8 +88,7 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
             throw new FileNotFoundException("Storage configuration file \"" + cacheConfig + "\" not found.");
         }
         if (testFile.isDirectory()) {
-            throw new FileNotFoundException("The file \"" + cacheConfig
-                    + "\" given as a storage configuration file is a directory!");
+            throw new FileNotFoundException("The file \"" + cacheConfig + "\" given as a storage configuration file is a directory!");
         }
         if (cacheManager == null) {
             cacheManager = new DefaultCacheManager(cacheConfig);
@@ -287,18 +285,27 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
         }
         UUID parentId = oldFile.getParent();
         if (parentId == null) {
-            throw new IOException("Cannot delete root directory.");
-        }
+            UserInfo info = users.get(getUser());
+            if (info == null) {
+                throw new IOException("User " + getUser() + " does not exist in the system.");
+            }
+            List<UUID> roots = info.getRoots();
+            roots.remove(id);
+            info.setRoots(roots);
+            users.put(info.getName(), info);
 
-        MetaFile parent = cache.get(parentId);
-        if (parent == null) {
-            // revert the put
-            throw new FileNotFoundException("Parent file not found");
+        } else {
+
+            MetaFile parent = cache.get(parentId);
+            if (parent == null) {
+                // revert the put
+                throw new FileNotFoundException("Parent file not found");
+            }
+            if (!ACLHandler.hasWriteAccess(getUser(), parent.getACL())) {
+                throw new IOException("Access denied to directory: " + parent.getName());
+            }
+            parent.removeFile(id);
         }
-        if (!ACLHandler.hasWriteAccess(getUser(), parent.getACL())) {
-            throw new IOException("Access denied to directory: " + parent.getName());
-        }
-        parent.removeFile(id);
         oldFile = cache.remove(id);
         // extra check
         if (oldFile == null) {
@@ -404,8 +411,7 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
                 }
             } catch (IllegalArgumentException e) {
                 if (getUser() == null) {
-                    throw new IllegalArgumentException("When accessing: " + parent.getName()
-                            + " user was null, which should not happen.");
+                    throw new IllegalArgumentException("When accessing: " + parent.getName() + " user was null, which should not happen.");
                 }
                 if (parent.getACL() == null) {
                     throw new IllegalArgumentException("When accessing: " + parent.getName()

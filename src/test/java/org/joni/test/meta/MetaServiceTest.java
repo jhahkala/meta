@@ -167,6 +167,7 @@ public class MetaServiceTest extends TestCase {
             }
             assertTrue(exception);
 
+            System.out.println("SEcond tewste");
             // client
             MetaDataAPI service2 = login(TEST_USER2, TEST_USER2_PW);
 
@@ -175,12 +176,8 @@ public class MetaServiceTest extends TestCase {
             subdirFail.setName("subdirfail");
             subdirFail.addACLItem(new ACLItem(TEST_USER2, true, true));
             exception = false;
-            try { // fail adding new root as not superuser
-                service2.putFile(subdirFail);
-            } catch (Exception e) {
-                exception = true;
-            }
-            assertTrue(exception);
+            service2.putFile(subdirFail);
+            service2.deleteFile(subdirFail.getId());
 
             subdirFail.setParent(root.getId());
             exception = false;
