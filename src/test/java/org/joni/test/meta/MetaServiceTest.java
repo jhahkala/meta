@@ -1,9 +1,11 @@
 package org.joni.test.meta;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Proxy;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -13,6 +15,7 @@ import javax.net.ssl.HttpsURLConnection;
 
 import junit.framework.TestCase;
 
+import org.bouncycastle.crypto.CryptoException;
 import org.glite.security.trustmanager.ContextWrapper;
 import org.joni.test.meta.client.TMHostnameVerifier;
 import org.joni.test.meta.server.MetaServer;
@@ -26,6 +29,7 @@ import com.caucho.hessian.client.HessianSRPProxyFactory;
 import com.caucho.hessian.client.TMHessianURLConnectionFactory;
 import com.eaio.uuid.UUID;
 
+import fi.hip.sicx.srp.HandshakeException;
 import fi.hip.sicx.srp.SRPAPI;
 import fi.hip.sicx.srp.SRPClient;
 import fi.hip.sicx.srp.SRPUtil;
@@ -41,8 +45,6 @@ public class MetaServiceTest extends TestCase {
     public static final String TRUSTED_CLIENT_CONFIG_FILE = "src/test/meta-client-trusted.conf";
     public static final String TRUSTED_CLIENT2_CONFIG_FILE = "src/test/meta-client2-trusted.conf";
     public static final String SERVER_PURGE_CONFIG_FILE = "src/test/meta-purge.conf";
-
-    MetaServer server;
 
     @Before
     public void setarrserver() {
@@ -67,17 +69,39 @@ public class MetaServiceTest extends TestCase {
         // }
     }
 
-    public void setup() throws Exception {
-        server = new MetaServer();
+    public MetaServer setup() throws Exception {
+        MetaServer server = new MetaServer();
         server.configure(SERVER_PURGE_CONFIG_FILE);
         server.start();
-        File configFile = new File(TRUSTED_CLIENT_CONFIG_FILE);
-        Properties props = new Properties();
-        props.load(new FileReader(configFile));
-        ContextWrapper wrapper = new ContextWrapper(props, false);
-        HttpsURLConnection.setDefaultSSLSocketFactory(wrapper.getSocketFactory());
-        HttpsURLConnection.setDefaultHostnameVerifier(new TMHostnameVerifier());
+        
+        return server;
 
+    }
+    
+    public MetaDataAPI login(String username, String passwordString) throws FileNotFoundException, IOException, GeneralSecurityException, CryptoException, HandshakeException{
+        // client
+        HessianSRPProxyFactory factory = HessianSRPProxyFactory.getFactory(TRUSTED_CLIENT_CONFIG_FILE);
+        String srpUrl = "https://localhost:40666/SRPService";
+        SRPAPI srpService = (SRPAPI) factory.create(SRPAPI.class, srpUrl);
+        
+        SRPClient.putVerifier(srpService, username, passwordString);
+        
+        byte identity[] = SRPUtil.stringBytes(username);
+        byte password[] = SRPUtil.stringBytes(passwordString);
+        
+        SessionKey key = SRPClient.login(srpService, identity, password);
+
+        String url = "https://localhost:40666/MetaService";
+        MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
+        HessianSRPProxy proxy = (HessianSRPProxy) Proxy.getInvocationHandler(service);
+        proxy.setSession(new SessionToken(identity, key.getK()).toString());
+
+        UserInfo info = new UserInfo();
+        info.setName(username);
+        service.addUser(info);
+
+        return service;
+        
     }
 
     /**
@@ -86,31 +110,12 @@ public class MetaServiceTest extends TestCase {
      */
     @Test
     public void testFilePut() throws Exception {
+        MetaServer server = null;
         try {
-            server = new MetaServer();
-            server.configure(SERVER_PURGE_CONFIG_FILE);
-            server.start();
+            server = setup();
             System.out.println("--------------fileput----------");
             // client
-            HessianSRPProxyFactory factory = HessianSRPProxyFactory.getFactory(TRUSTED_CLIENT_CONFIG_FILE);
-            String srpUrl = "https://localhost:40666/SRPService";
-            SRPAPI srpService = (SRPAPI) factory.create(SRPAPI.class, srpUrl);
-            
-            SRPClient.putVerifier(srpService, TEST_USER, TEST_USER_PW);
-            
-            byte identity[] = SRPUtil.stringBytes(TEST_USER);
-            byte password[] = SRPUtil.stringBytes(TEST_USER_PW);
-            
-            SessionKey key = SRPClient.login(srpService, identity, password);
-
-            String url = "https://localhost:40666/MetaService";
-            MetaDataAPI service = (MetaDataAPI) factory.create(MetaDataAPI.class, url);
-            HessianSRPProxy proxy = (HessianSRPProxy) Proxy.getInvocationHandler(service);
-            proxy.setSession(new SessionToken(identity, key.getK()).toString());
-
-            UserInfo info = new UserInfo();
-            info.setName(TEST_USER);
-            service.addUser(info);
+            MetaDataAPI service = login(TEST_USER, TEST_USER_PW);
 
             boolean exception = false;
             try {
@@ -163,17 +168,7 @@ public class MetaServiceTest extends TestCase {
             assertTrue(exception);
 
             // client
-            HessianSRPProxyFactory factory2 = HessianSRPProxyFactory.getFactory(TRUSTED_CLIENT2_CONFIG_FILE);
-            MetaDataAPI service2 = (MetaDataAPI) factory2.create(MetaDataAPI.class, url);
-            SRPClient.putVerifier(srpService, TEST_USER2, TEST_USER2_PW);
-            
-            byte identity2[] = SRPUtil.stringBytes(TEST_USER2);
-            byte password2[] = SRPUtil.stringBytes(TEST_USER2_PW);
-            
-            SessionKey key2 = SRPClient.login(srpService, identity2, password2);
-            HessianSRPProxy proxy2 = (HessianSRPProxy) Proxy.getInvocationHandler(service2);
-            proxy2.setSession(new SessionToken(identity2, key2.getK()).toString());
-
+            MetaDataAPI service2 = login(TEST_USER2, TEST_USER2_PW);
 
             MetaFile subdirFail = new MetaFileImpl();
             subdirFail.setDirectory(true);
@@ -209,6 +204,7 @@ public class MetaServiceTest extends TestCase {
 
     @Test
     public void testFileUpdate() throws Exception {
+        MetaServer server = null;
         try {
             setup();
 
@@ -357,6 +353,7 @@ public class MetaServiceTest extends TestCase {
 
     @Test
     public void testDelete() throws Exception {
+        MetaServer server = null;
         try {
 
             setup();
@@ -456,6 +453,7 @@ public class MetaServiceTest extends TestCase {
 
     @Test
     public void testGetByPath() throws Exception {
+        MetaServer server = null;
         try {
 
             setup();
@@ -580,6 +578,7 @@ public class MetaServiceTest extends TestCase {
 
     @Test
     public void testGet() throws Exception {
+        MetaServer server = null;
         try {
 
             setup();
@@ -707,6 +706,7 @@ public class MetaServiceTest extends TestCase {
 
     @Test
     public void testGetListFile() throws Exception {
+        MetaServer server = null;
         try {
 
             setup();
@@ -831,6 +831,7 @@ public class MetaServiceTest extends TestCase {
 
     @Test
     public void notestStress() throws Exception {
+        MetaServer server = null;
         try {
 
             setup();
@@ -902,6 +903,7 @@ public class MetaServiceTest extends TestCase {
 
     // @Test
     public void testFile() throws Exception {
+        MetaServer server = null;
         try {
 
             setup();
@@ -969,6 +971,7 @@ public class MetaServiceTest extends TestCase {
 
     @Test
     public void testGetUserArg() throws Exception {
+        MetaServer server = null;
         try {
 
             setup();
