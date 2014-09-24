@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.net.URLDecoder;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.Properties;
 import java.util.StringTokenizer;
@@ -53,10 +52,9 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
     }
     private static final long serialVersionUID = 1L;
     private static DefaultCacheManager cacheManager = null;
-    private static DefaultCacheManager sessionCacheManager = null;
     private static Cache<UUID, MetaFile> cache = null;
     private static Cache<String, UserInfo> users = null;
-    private static Cache<String, User> sessions = null;;
+    private static Cache<String, User> sessions = null;
     private static String _superUser = null;
     /** used to pass along the user certificate from servlet handling to the actual methods doing the work */
     private static ThreadLocal<X509Certificate[]> certStore = new ThreadLocal<X509Certificate[]>();
@@ -77,7 +75,6 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
         Properties props = new Properties();
         props.load(new FileReader(configFile));
         String cacheConfig = props.getProperty(CACHE_CONFIG_FILE_OPT);
-        String sessionConfig = props.getProperty(SRPService.USERSLOGIN_CONFIG_FILE_OPT);
         String superUser = props.getProperty(SUPER_USER_OPT);
         if (superUser == null) {
             throw new IOException("No superuser setting found in the configuration file.");
@@ -90,36 +87,43 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
         if (testFile.isDirectory()) {
             throw new FileNotFoundException("The file \"" + cacheConfig + "\" given as a storage configuration file is a directory!");
         }
-        if (cacheManager == null) {
-            cacheManager = new DefaultCacheManager(cacheConfig);
-        }
+        cacheManager = srpService.getCacheManager();
         cache = cacheManager.getCache("meta");
         users = cacheManager.getCache("users");
         sessions = srpService.getSessionCache();
+    }
+    
+    public void destroy(){
+        System.out.println("******************** stopping **************************");
+        cache.stop();
+        users.stop();
+        sessions.stop();
+        cacheManager.stop();
+        cacheManager = null;
     }
 
     public void service(ServletRequest request, ServletResponse response) throws IOException, ServletException {
         // Interpret the client's certificate.
         X509Certificate[] cert = (X509Certificate[]) request.getAttribute("javax.servlet.request.X509Certificate");
         certStore.set(cert);
-        Enumeration<String> attrs = request.getAttributeNames();
-        System.out.println("Attributes:");
-        while (attrs.hasMoreElements()) {
-            String attribute = (String) attrs.nextElement();
-            System.out.println("attribute: " + attribute + " value " + request.getAttribute(attribute));
-        }
-        System.out.println("Paramaters:");
-        Enumeration<String> params = request.getParameterNames();
-        while (params.hasMoreElements()) {
-            String attribute = (String) params.nextElement();
-            System.out.println("paramater: " + attribute);
-        }
+//        Enumeration<String> attrs = request.getAttributeNames();
+//        System.out.println("Attributes:");
+//        while (attrs.hasMoreElements()) {
+//            String attribute = (String) attrs.nextElement();
+//            System.out.println("attribute: " + attribute + " value " + request.getAttribute(attribute));
+//        }
+//        System.out.println("Paramaters:");
+//        Enumeration<String> params = request.getParameterNames();
+//        while (params.hasMoreElements()) {
+//            String attribute = (String) params.nextElement();
+//            System.out.println("paramater: " + attribute);
+//        }
         if (request instanceof HttpServletRequest) {
             username.set(null);
             // HttpSession session = ((HttpServletRequest)request).getSession();
             HttpServletRequest sreg = (HttpServletRequest) request;
             String SRPSessionEncoded = sreg.getHeader("SRPSession");
-            System.out.println("Session: " + SRPSessionEncoded);
+//            System.out.println("Session: " + SRPSessionEncoded);
             try {
                 if (SRPSessionEncoded == null) {
                     throw new IOException("No session, please log in.");
@@ -138,10 +142,10 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
                 if (user == null) {
                     throw new IOException("Access denied.");
                 }
-                List<Session> list = user.getSessions();
-                for (Session session : list) {
-                    System.out.println("session: " + new String(session._sessionId));
-                }
+//                List<Session> list = user.getSessions();
+//                for (Session session : list) {
+//                    System.out.println("session: " + new String(session._sessionId));
+//                }
                 Session session = user.findSession(sessionId);
                 if (session == null) {
                     throw new IOException("Access is denied.");
@@ -149,10 +153,10 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
                 if (!session.isValid(sessionId)) {
                     throw new IOException("Session is not valid.");
                 }
-                System.out.println("User " + new String(user.getIdentity()) + " is valid");
+//                System.out.println("User " + new String(user.getIdentity()) + " is valid");
                 username.set(new String(user.getIdentity()));
             } catch (Exception e) {
-                System.out.println("Exception: " + e.getMessage());
+//                System.out.println("Exception: " + e.getMessage());
                 HttpServletResponse httpResponse = (HttpServletResponse) response;
                 httpResponse.sendError(401, e.getMessage());
                 e.printStackTrace();
@@ -243,6 +247,14 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
         if (oldFile == null) {
             throw new IOException("File does not exists");
         }
+
+        List<UUID> updatedChildren = updatedFile.listFiles();
+        List<UUID> oldChildren = oldFile.listFiles();
+        if(!(updatedChildren == null && oldChildren == null ) && 
+                !(updatedChildren != null && updatedChildren.equals(oldChildren))){
+            throw new IOException("Cannot change child directories/files of " + updatedFile.getName() + " by updating a directory, use delete or putFile.");
+        }
+
         // updating root
         if (updatedFile.getParent() == null) {
             if (oldFile.getParent() != null) {
@@ -254,7 +266,7 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
             cache.put(id, updatedFile);
             return;
         }
-
+        
         if (!updatedFile.isDirectory() && !updatedFile.getParent().equals(oldFile.getParent())) {
             throw new IOException(
                     "The parent directory of old version and new version do not match. To move file, delete it from old place and put it to the new place.");
@@ -282,6 +294,10 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
         MetaFile oldFile = cache.get(id);
         if (oldFile == null) {
             throw new FileNotFoundException("File does not exists");
+        }
+        
+        if(oldFile.isDirectory() && (oldFile.listFiles() != null && oldFile.listFiles().size() != 0)){
+            throw new IOException("Cannot delete " + oldFile.getName() + " it is not empty.");
         }
         UUID parentId = oldFile.getParent();
         if (parentId == null) {
@@ -548,5 +564,4 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
         }
         return null;
     }
-
 }

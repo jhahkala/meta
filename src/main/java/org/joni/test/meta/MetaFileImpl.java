@@ -163,7 +163,7 @@ public class MetaFileImpl extends AccessControlledImpl implements MetaFile {
             throw new IllegalArgumentException("Can't remove file, this is not a directory.");
         }
         if (_subFiles == null) {
-            throw new IllegalArgumentException("Can't remove file, no files exist in this directory.");
+            throw new IllegalArgumentException("Can't remove file from " + _name + ", no files exist in this directory.");
         }
         if (!_subFiles.remove(id)) {
             throw new IllegalArgumentException("Can't remove file, no such id exists.");

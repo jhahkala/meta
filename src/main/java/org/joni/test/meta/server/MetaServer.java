@@ -33,6 +33,7 @@ public class MetaServer {
         if(_server != null){
             System.out.println("server stopping");
             _server.stop();
+            _server.destroy();
         }
     }
     
