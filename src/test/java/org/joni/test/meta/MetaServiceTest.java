@@ -18,15 +18,12 @@ import java.util.Properties;
 
 import org.bouncycastle.crypto.CryptoException;
 import org.glite.security.trustmanager.ContextWrapper;
-import org.joni.test.meta.client.TMHostnameVerifier;
 import org.joni.test.meta.server.MetaServer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import com.caucho.hessian.client.HessianProxyFactory;
-import com.caucho.hessian.client.HessianSRPProxy;
-import com.caucho.hessian.client.HessianSRPProxyFactory;
 import com.caucho.hessian.client.TMHessianURLConnectionFactory;
 import com.eaio.uuid.UUID;
 
@@ -36,6 +33,9 @@ import fi.hip.sicx.srp.SRPClient;
 import fi.hip.sicx.srp.SRPUtil;
 import fi.hip.sicx.srp.SessionKey;
 import fi.hip.sicx.srp.SessionToken;
+import fi.hip.sicx.srp.hessian.HessianSRPProxy;
+import fi.hip.sicx.srp.hessian.HessianSRPProxyFactory;
+import fi.hip.sicx.srp.hessian.TMHostnameVerifier;
 
 public class MetaServiceTest {
 
