@@ -94,7 +94,6 @@ public class MetaService extends HessianServlet implements MetaDataAPI {
     }
     
     public void destroy(){
-        System.out.println("******************** stopping **************************");
         cache.stop();
         users.stop();
         sessions.stop();
