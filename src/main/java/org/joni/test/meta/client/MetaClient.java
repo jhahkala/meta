@@ -19,10 +19,12 @@ import org.joni.test.meta.SLA;
 import org.joni.test.meta.UserInfo;
 
 import com.beust.jcommander.JCommander;
-import com.caucho.hessian.client.HessianSRPProxy;
-import com.caucho.hessian.client.HessianSRPProxyFactory;
 import com.caucho.hessian.client.TMHessianURLConnectionFactory;
 import com.eaio.uuid.UUID;
+
+import fi.hip.sicx.srp.hessian.HessianSRPProxy;
+import fi.hip.sicx.srp.hessian.HessianSRPProxyFactory;
+import fi.hip.sicx.srp.hessian.TMHostnameVerifier;
 
 
 /**
