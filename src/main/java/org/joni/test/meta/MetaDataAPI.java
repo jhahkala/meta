@@ -74,6 +74,34 @@ public interface MetaDataAPI {
     public UserInfo getUserInfo();
     
     /**
+     * Get the friend requests received by the user.
+     * @return The information of the user.
+     * @throws SessionException 
+     */
+    public List<String> getFriends() throws SessionException;
+
+    /**
+     * Get the friend requests received by the user.
+     * @return The information of the user.
+     * @throws SessionException 
+     */
+    public List<FriendRequest> getFriendRequests() throws SessionException;
+    
+    /**
+     * Get the friend requests received by the user.
+     * @return The information of the user.
+     * @throws SessionException 
+     */
+    public void acceptFriendRequest(String name) throws SessionException;
+    
+    /**
+     * Get the friend requests received by the user.
+     * @return The information of the user.
+     * @throws SessionException 
+     */
+    public void rejectFriendRequest(String name) throws SessionException;
+    
+    /**
      * Get the given user's information. Superuser can use this method to access the information of the given user.
      * @return The information of the user.
      * @throws SessionException 
